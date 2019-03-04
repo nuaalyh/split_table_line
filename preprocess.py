@@ -2,7 +2,7 @@ import cv2
 
 def preprocess(img,scale = 15):
     '''
-        功能：图像预处理
+        功能：图像预处理(检测图像横竖线)
         :参数: img: 一张灰度图像
         :返回值:
                 mask:输入图像检测横竖线后的mask（图像）
