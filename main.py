@@ -38,13 +38,11 @@ def max_rect(contours):
     return x,y,w,h
 
 
-def detect_table(img, mask, contours, pattern): #检测表格横线竖线
+def detect_table(img, mask, contours): #检测表格横线竖线
     '''
         检测图中表格的水平和竖直直线
         :参数: img: 一张有表格的灰度图像，没有表格的图像处理会出现错误
                mask, contours: preprocess函数输出
-               pattern: 'line':检测行
-                        'cell':检测行和列
         :返回值: hors: 图片表格的水平直线的纵坐标的列表
                  vers: 图片表格的垂直直线的横坐标的列表
     '''
@@ -70,9 +68,6 @@ def detect_table(img, mask, contours, pattern): #检测表格横线竖线
                 hors.append(y1)
     hors = simplify_list(hors) #去除重复的横线
 
-    if pattern == 'line':
-        return hors,x,w
-
     '''
     上述霍夫变换检测横线效果好，但是检测竖线效果不佳，漏检情况较严重。所以竖线检测采用以下新的方法
     '''
@@ -90,76 +85,58 @@ def detect_table(img, mask, contours, pattern): #检测表格横线竖线
         vers = list(set(vers) | set(temp))
     vers = simplify_list(vers)
 
-    if pattern == 'cell':
-        return hors,vers
+    return hors,vers
 
 
 
 
 
 
-def split_img(img, mask,  contours, pattern = 'cell'):
+def split_img(img, mask,  contours):
     '''
         分割图像，将图像分为三部分：
-        第一部分是表格以上内容，第二部分是表格分割的单元格集合（二维列表），第三部分是表格以下内容
+        第一部分是表格以上内容，第二部分是表格分割的行（一维列表），第三部分是表格以下内容
         :参数: img: 输入图像
                mask, contours: preprocess函数输出
-               pattern: 'line':表格部分按行分割
-                        'cell':表格部分按列分割
-        :返回值: 分割后的图像列表，第一个元素是表格以上内容，第二个元素是表格分割的单元格集合（二维列表），第三个元素是表格以下内容
+        :返回值: 分割后的图像列表，第一个元素是表格以上内容，第二部分是表格分割的行（一维列表），第三个元素是表格以下内容
     '''
     res = []
 
-    if pattern == 'line':
-        hors,x,w = detect_table(img,mask,contours,pattern)
-        m = len(hors) - 1  # 表格行
-        tablelines = [0 for row in range(m)]
-        for i in range(m):
-            tablelines[i] = img[hors[i]:hors[i+1], x : x + w ]
-            # tablelines[i] = erase_img_black_border(tablelines[i])
-            # showimg(tablelines[i])
-            cv2.imwrite("./result/2/table_line/table_line_{}.png".format(i),tablelines[i])
-        res.append(img[:hors[0] - 1, :])
-        res.append(tablelines)
-        res.append(img[hors[-1] + 1:, :])  # 表格以下部分
-        # 去除黑边
-        res[0] = erase_img_black_border(res[0], 'bottom', False)
-        res[2] = erase_img_black_border(res[2], 'top', False)
-        return  res
+    hors, vers = detect_table(img, mask,  contours)
+    m = len(hors) - 1 #表格行
+    n = len(vers) - 1 # 表格列
 
-    elif pattern == 'cell':
-        hors, vers = detect_table(img, mask,  contours)
-        m = len(hors) - 1 #表格行
-        n = len(vers) - 1 # 表格列
+    tablecells = [ [0 for col in range(n)] for row in range(m)]
+    tablelines = [0 for row in range(m)]
 
-        tablecells = [ [0 for col in range(n)] for row in range(m)]
-        for i in range(m):
-            for j in range(n):
-                # print(i,j)
-                tablecells[i][j] = img[hors[i]:hors[i+1],vers[j]:vers[j+1]]
-                # showimg(tablecells[i][j])
-                tablecells[i][j] = erase_img_black_border(tablecells[i][j])
-                # showimg(tablecells[i][j])
-                # cv2.imwrite("./result/13/new/{}-{}.png".format(i,j),tablecells[i][j])
-        res.append(img[:hors[0] - 1, :])
-        res.append(tablecells)
-        res.append(img[hors[-1] + 1:, :])  # 表格以下部分
-        # 去除黑边
-        res[0] = erase_img_black_border(res[0], 'bottom', False)
-        res[2] = erase_img_black_border(res[2], 'top', False)
-        return res
+    for i in range(m):
+        for j in range(n):
+            tablecells[i][j] = img[hors[i]:hors[i+1],vers[j]:vers[j+1]]
+            tablecells[i][j] = erase_img_black_border(tablecells[i][j])
+            # cv2.imwrite("./result/2/new/{}-{}.png".format(i,j),tablecells[i][j])
+            if j == 0:
+                line_img = tablecells[i][0]
+            else:
+                line_img = np.concatenate((line_img, tablecells[i][j]),axis=1)
+        tablelines[i] = line_img
+        # cv2.imwrite("./result/2/table_line/line-{}.png".format(i), tablelines[i])
 
-    else:
-        print("Wrong pattern parameter!")
+    res.append(img[:hors[0] - 1, :])
+    res.append(tablelines)
+    res.append(img[hors[-1] + 1:, :])  # 表格以下部分
+    # 去除黑边
+    res[0] = erase_img_black_border(res[0], 'bottom', False)
+    res[2] = erase_img_black_border(res[2], 'top', False)
+    return res
+
 
 
     
 
 if __name__=='__main__':
-    src_img = cv2.imread('result/2/new/0-0.png')
-    src_img1 = cv2.imread('result/2/new/0-1.png')
-    # src_img = rotation_correct(src_img)
-    # src_img = cv2.resize(src_img,(800,1000)) #size = (w,h) 必须resize到（800，1000）这个尺寸
+    src_img = cv2.imread('result/2/2.png')
+    src_img = rotation_correct(src_img)
+    src_img = cv2.resize(src_img,(800,1000)) #size = (w,h) 必须resize到（800，1000）这个尺寸
     # showimg(src_img)
     if src_img is None:
         print("Image read failed!")
@@ -168,16 +145,16 @@ if __name__=='__main__':
         img = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
 
 
-    # mask, contours = preprocess(img)
+    mask, contours = preprocess(img)
 
-    # cv2.imwrite("9_mask_resize.png",mask)
-    # res = [] #结果
-    # if is_there_table(img, mask, contours):
-    #     res = split_img(img, mask,  contours)
-    #     # print(np.array(res[1]).shape) #检查表格分割后的单元格数量
-    # else:
-    #     res.append(img)
-    #     # print(len(res)) #等于1代表无表格图像返回自身
+    cv2.imwrite("9_mask_resize.png",mask)
+    res = [] #结果
+    if is_there_table(img, mask, contours):
+        res = split_img(img, mask,  contours)
+        # print(np.array(res[1]).shape) #检查表格分割后的单元格数量
+    else:
+        res.append(img)
+        # print(len(res)) #等于1代表无表格图像返回自身
 
 
     # x,y,w,h = max_rect(contours)
